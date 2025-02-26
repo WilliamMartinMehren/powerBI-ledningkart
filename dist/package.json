@@ -1,0 +1,17 @@
+{
+		"version": "1.0.0.0",
+		"author": {"name":"William Martin Mehren","email":"william.martin.mehren@drammen.kommune.no"},
+		"resources": [
+			{
+				"resourceId": "rId0",
+				"sourceType": 5,
+				"file": "resources/cableMap9DE4F83A45DF4FFA8FD2CEF5FFF82428.pbiviz.json"
+			}
+		],
+		"visual": {"name":"cableMap","displayName":"cableMap","guid":"cableMap9DE4F83A45DF4FFA8FD2CEF5FFF82428","visualClassName":"Visual","version":"1.0.0.0","description":"kart for kabler","supportUrl":"google.com","gitHubUrl":""},
+		"metadata": {
+			"pbivizjson": {
+				"resourceId": "rId0"
+			}
+		}
+	}
