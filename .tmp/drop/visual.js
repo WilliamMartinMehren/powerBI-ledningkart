@@ -126,13 +126,34 @@ class VisualFormattingSettingsModel extends FormattingSettingsModel {
 
 
 
+function verifyNumber(data) {
+    for (const datum of data) {
+        if (typeof datum !== "number")
+            throw "error";
+    }
+}
+class LineData {
+    latLongs;
+    color;
+    id;
+    constructor(latLongs, id, color) {
+        this.id = id;
+        this.latLongs = latLongs;
+        if (this.color) {
+            this.color = color;
+        }
+        else {
+        }
+    }
+}
 class Visual {
     target;
     formattingSettings;
     formattingSettingsService;
     map;
+    cordDict = {};
+    cords = [];
     constructor(options) {
-        console.log('Visual constructor', options);
         this.formattingSettingsService = new powerbi_visuals_utils_formattingmodel__WEBPACK_IMPORTED_MODULE_0__/* .FormattingSettingsService */ .O();
         this.target = options.element;
         if (document) {
@@ -140,26 +161,48 @@ class Visual {
             map_element.id = "map";
             this.target.appendChild(map_element);
             this.map = (0,leaflet__WEBPACK_IMPORTED_MODULE_1__.map)(map_element).setView([0, 0], 13);
-            (0,leaflet__WEBPACK_IMPORTED_MODULE_1__.tileLayer)('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="https://www.kartverket.no">Kartverket</a> contributors'
-            }).addTo(this.map);
-            var latlngs = [
-                [45.51, -122.68],
-                [37.77, -122.43],
-                [34.04, -118.2]
-            ];
-            var line = (0,leaflet__WEBPACK_IMPORTED_MODULE_1__.polyline)(latlngs, { color: 'red' }).addTo(this.map);
-            this.map.fitBounds(line.getBounds());
+            (0,leaflet__WEBPACK_IMPORTED_MODULE_1__.tileLayer)('https://tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(this.map);
         }
     }
     update(options) {
+        //hent nye verdier
         this.formattingSettings = this.formattingSettingsService.populateFormattingSettingsModel(_settings__WEBPACK_IMPORTED_MODULE_2__/* .VisualFormattingSettingsModel */ .S, options.dataViews[0]);
-        console.log('Visual update', options);
+        const columns = options.dataViews[0].table.columns;
+        //resett tidligere verdier
+        for (const cord of this.cords) {
+            cord.remove();
+        }
+        this.cords = [];
+        this.cordDict = {};
+        // hent dataindekser
+        let indexes = {};
+        let hasId = false;
+        for (let keyIndex = 0; keyIndex < columns.length; keyIndex++) {
+            for (const key of Object.keys(columns[keyIndex].roles)) {
+                if (key == "cable_id")
+                    hasId = true;
+                indexes[key] = keyIndex;
+            }
+        }
+        for (const row of options.dataViews[0].table.rows) {
+            verifyNumber(row);
+            let cableIndex = 0;
+            if (hasId)
+                cableIndex = row[indexes["cable_id"]];
+            //ser om ledningen er i ordboken, hvis ikke lager den en ny ledning
+            if (this.cordDict[cableIndex]) {
+                this.cordDict[cableIndex].push((0,leaflet__WEBPACK_IMPORTED_MODULE_1__.latLng)(row[indexes["cable_x"]], row[indexes["cable_y"]]));
+            }
+            else {
+                this.cordDict[cableIndex] = [(0,leaflet__WEBPACK_IMPORTED_MODULE_1__.latLng)(row[indexes["cable_x"]], row[indexes["cable_y"]])];
+            }
+        }
+        for (const [key, line] of Object.entries(this.cordDict)) {
+            let newCord = (0,leaflet__WEBPACK_IMPORTED_MODULE_1__.polyline)(line, { color: "red" }).addTo(this.map);
+            this.cords.push(newCord);
+        }
+        this.map.fitBounds(this.cords[0].getBounds());
     }
-    /**
-     * Returns properties pane formatting model content hierarchies, properties and latest formatting values, Then populate properties pane.
-     * This method is called once every time we open properties pane or when the user edit any format property.
-     */
     getFormattingModel() {
         return this.formattingSettingsService.buildFormattingModel(this.formattingSettings);
     }

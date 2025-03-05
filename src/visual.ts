@@ -32,55 +32,123 @@ import "./../style/visual.less";
 import VisualConstructorOptions = powerbi.extensibility.visual.VisualConstructorOptions;
 import VisualUpdateOptions = powerbi.extensibility.visual.VisualUpdateOptions;
 import IVisual = powerbi.extensibility.visual.IVisual;
-import {map, Map, tileLayer, polyline, LatLngExpression} from "leaflet"
+import {map, Map, tileLayer, polyline, LatLngExpression, latLng, Polyline} from "leaflet"
 import { VisualFormattingSettingsModel } from "./settings";
 
-export class Visual implements IVisual {
-    private target: HTMLElement;
-    
-    private formattingSettings: VisualFormattingSettingsModel;
-    private formattingSettingsService: FormattingSettingsService;
-    private map: Map;
-    constructor(options: VisualConstructorOptions) {
-        console.log('Visual constructor', options);
-        this.formattingSettingsService = new FormattingSettingsService();
-        this.target = options.element;
-       
+function verifyNumber(data: powerbi.DataViewTableRow) : asserts data is number[] {
+    for (const datum of data){
+        if (typeof datum !== "number") throw "error";
+    }
+}
 
-        if (document) {
-            const map_element = document.createElement("div");
-            map_element.id = "map";
-            this.target.appendChild(map_element);
-            
-            this.map = map(map_element).setView([0, 0], 13);
-            
-            tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="https://www.kartverket.no">Kartverket</a> contributors'
-            }).addTo(this.map);
+class LineData {
+    latLongs: LatLngExpression[];
+    color: string;
+    id: number;
 
-            var latlngs: LatLngExpression[] = [
-                [45.51, -122.68],
-                [37.77, -122.43],
-                [34.04, -118.2]
-            ];
-            
-            var line = polyline(latlngs, {color: 'red'}).addTo(this.map);
-            this.map.fitBounds(line.getBounds());
+    constructor(latLongs: LatLngExpression[], id: number, color?: string) {
+        this.id = id;
+        this.latLongs = latLongs;
+        
+        if (this.color) {
+            this.color = color;
+        } else {
+
         }
     }
 
-    public update(options: VisualUpdateOptions) {
-        this.formattingSettings = this.formattingSettingsService.populateFormattingSettingsModel(VisualFormattingSettingsModel, options.dataViews[0]);
-        
-        console.log('Visual update', options);
- 
-    }
+}
 
-    /**
-     * Returns properties pane formatting model content hierarchies, properties and latest formatting values, Then populate properties pane.
-     * This method is called once every time we open properties pane or when the user edit any format property. 
-     */
-    public getFormattingModel(): powerbi.visuals.FormattingModel {
-        return this.formattingSettingsService.buildFormattingModel(this.formattingSettings);
-    }
+
+export class Visual implements IVisual {
+	private target: HTMLElement;
+	private formattingSettings: VisualFormattingSettingsModel;
+	private formattingSettingsService: FormattingSettingsService;
+
+	private map: Map;
+	private cordDict: Record<number, LatLngExpression[]> = {};
+	private cords: Polyline[] = [];
+
+	constructor(options: VisualConstructorOptions) {
+
+		this.formattingSettingsService = new FormattingSettingsService();
+		this.target = options.element;
+
+		if (document) {
+
+			const map_element = document.createElement("div");
+			map_element.id = "map";
+			this.target.appendChild(map_element);
+			
+			this.map = map(map_element).setView([0, 0], 13);
+			
+			tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(this.map);
+			
+		}
+	}
+
+	public update(options: VisualUpdateOptions) {
+        //hent nye verdier
+		this.formattingSettings = this.formattingSettingsService.populateFormattingSettingsModel(VisualFormattingSettingsModel, options.dataViews[0]);
+        const columns = options.dataViews[0].table.columns;
+
+		//resett tidligere verdier
+		for (const cord of this.cords) {
+			cord.remove();
+		}
+
+		this.cords = [];
+
+		this.cordDict = {};
+
+
+        // hent dataindekser
+        let indexes: Record<string, number> = {};
+
+        let hasId: boolean = false;
+
+        for (let keyIndex = 0; keyIndex < columns.length; keyIndex ++) {
+
+            for (const key of Object.keys(columns[keyIndex].roles)) {
+
+                if (key == "cable_id") hasId = true;
+
+                indexes[key] = keyIndex;
+            }
+        }
+
+        
+		
+		for (const row of options.dataViews[0].table.rows) {
+
+            verifyNumber(row);
+
+            let cableIndex: number = 0;
+
+            if (hasId) cableIndex = row[indexes["cable_id"]];
+			
+
+			//ser om ledningen er i ordboken, hvis ikke lager den en ny ledning
+			if (this.cordDict[cableIndex]){
+				this.cordDict[cableIndex].push(latLng(row[indexes["cable_x"]], row[indexes["cable_y"]]));
+
+			} else {
+				this.cordDict[cableIndex] = [latLng(row[indexes["cable_x"]], row[indexes["cable_y"]])];
+			}
+			
+		}
+
+		for (const [key, line] of Object.entries(this.cordDict)){
+			let newCord: Polyline = polyline(line, {color: "red"}).addTo(this.map);
+			this.cords.push(newCord);
+			
+		}
+        
+		this.map.fitBounds(this.cords[0].getBounds());
+        
+	}
+
+	public getFormattingModel(): powerbi.visuals.FormattingModel {
+		return this.formattingSettingsService.buildFormattingModel(this.formattingSettings);
+	}
 }

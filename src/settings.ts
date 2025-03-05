@@ -80,4 +80,5 @@ export class VisualFormattingSettingsModel extends FormattingSettingsModel {
     dataPointCard = new DataPointCardSettings();
 
     cards = [this.dataPointCard];
+
 }
