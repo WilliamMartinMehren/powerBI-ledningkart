@@ -10,6 +10,7 @@ var cableMap9DE4F83A45DF4FFA8FD2CEF5FFF82428_DEBUG;
 /* harmony export */   S: () => (/* binding */ VisualFormattingSettingsModel)
 /* harmony export */ });
 /* harmony import */ var powerbi_visuals_utils_formattingmodel__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(674);
+/* harmony import */ var powerbi_visuals_utils_colorutils__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(986);
 /*
  *  Power BI Visualizations
  *
@@ -37,40 +38,21 @@ var cableMap9DE4F83A45DF4FFA8FD2CEF5FFF82428_DEBUG;
  */
 
 
+
 var FormattingSettingsCard = powerbi_visuals_utils_formattingmodel__WEBPACK_IMPORTED_MODULE_0__/* .formattingSettings.SimpleCard */ .z.Tn;
 var FormattingSettingsModel = powerbi_visuals_utils_formattingmodel__WEBPACK_IMPORTED_MODULE_0__/* .formattingSettings.Model */ .z.Kx;
 /**
  * Data Point Formatting Card
  */
 class DataPointCardSettings extends FormattingSettingsCard {
-    defaultColor = new powerbi_visuals_utils_formattingmodel__WEBPACK_IMPORTED_MODULE_0__/* .formattingSettings.ColorPicker */ .z.sk({
-        name: "defaultColor",
-        displayName: "Default color",
-        value: { value: "" }
-    });
-    showAllDataPoints = new powerbi_visuals_utils_formattingmodel__WEBPACK_IMPORTED_MODULE_0__/* .formattingSettings.ToggleSwitch */ .z.jF({
-        name: "showAllDataPoints",
-        displayName: "Show all",
-        value: true
-    });
     fill = new powerbi_visuals_utils_formattingmodel__WEBPACK_IMPORTED_MODULE_0__/* .formattingSettings.ColorPicker */ .z.sk({
         name: "fill",
         displayName: "Fill",
         value: { value: "" }
     });
-    fillRule = new powerbi_visuals_utils_formattingmodel__WEBPACK_IMPORTED_MODULE_0__/* .formattingSettings.ColorPicker */ .z.sk({
-        name: "fillRule",
-        displayName: "Color saturation",
-        value: { value: "" }
-    });
-    fontSize = new powerbi_visuals_utils_formattingmodel__WEBPACK_IMPORTED_MODULE_0__/* .formattingSettings.NumUpDown */ .z.iB({
-        name: "fontSize",
-        displayName: "Text Size",
-        value: 12
-    });
     name = "dataPoint";
     displayName = "Data colors";
-    slices = [this.defaultColor, this.showAllDataPoints, this.fill, this.fillRule, this.fontSize];
+    slices = [this.fill];
 }
 /**
 * visual settings model class
@@ -80,6 +62,17 @@ class VisualFormattingSettingsModel extends FormattingSettingsModel {
     // Create formatting settings model formatting cards
     dataPointCard = new DataPointCardSettings();
     cards = [this.dataPointCard];
+    populateDataPointSlices(categories) {
+        this.dataPointCard.slices = [];
+        for (const category of categories) {
+            this.dataPointCard.slices.push(new powerbi_visuals_utils_formattingmodel__WEBPACK_IMPORTED_MODULE_0__/* .formattingSettings.ColorPicker */ .z.sk({
+                name: "fill",
+                displayName: String(category.id),
+                selector: powerbi_visuals_utils_colorutils__WEBPACK_IMPORTED_MODULE_1__/* .ColorHelper */ .A1.normalizeSelector(category.identity.getSelector(), false),
+                value: { value: category.color }
+            }));
+        }
+    }
 }
 
 
@@ -93,9 +86,10 @@ class VisualFormattingSettingsModel extends FormattingSettingsModel {
 /* harmony export */   b: () => (/* binding */ Visual)
 /* harmony export */ });
 /* harmony import */ var powerbi_visuals_utils_formattingmodel__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(674);
-/* harmony import */ var leaflet__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(481);
-/* harmony import */ var leaflet__WEBPACK_IMPORTED_MODULE_1___default = /*#__PURE__*/__webpack_require__.n(leaflet__WEBPACK_IMPORTED_MODULE_1__);
-/* harmony import */ var _settings__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(125);
+/* harmony import */ var powerbi_visuals_utils_colorutils__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(986);
+/* harmony import */ var leaflet__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(481);
+/* harmony import */ var leaflet__WEBPACK_IMPORTED_MODULE_2___default = /*#__PURE__*/__webpack_require__.n(leaflet__WEBPACK_IMPORTED_MODULE_2__);
+/* harmony import */ var _settings__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(125);
 /*
 *  Power BI Visual CLI
 *
@@ -126,23 +120,122 @@ class VisualFormattingSettingsModel extends FormattingSettingsModel {
 
 
 
+
 function verifyNumber(data) {
     for (const datum of data) {
         if (typeof datum !== "number")
             throw "error";
     }
 }
+class LineSegment {
+    positions;
+    depth;
+    category;
+    constructor(config) {
+        this.positions = config.positions;
+        this.depth = config.depth;
+        this.category = config.category;
+    }
+    render(depthScale) {
+        return (0,leaflet__WEBPACK_IMPORTED_MODULE_2__.polyline)(this.positions, { color: this.category.color });
+    }
+}
 class LineData {
-    latLongs;
-    color;
-    id;
-    constructor(latLongs, id, color) {
-        this.id = id;
-        this.latLongs = latLongs;
-        if (this.color) {
-            this.color = color;
+    lines = [];
+    lineConfigs;
+    lineBounds = new leaflet__WEBPACK_IMPORTED_MODULE_2__.LatLngBounds((0,leaflet__WEBPACK_IMPORTED_MODULE_2__.latLng)(0, 0), (0,leaflet__WEBPACK_IMPORTED_MODULE_2__.latLng)(0, 0));
+    host;
+    colorHelper;
+    colors = [];
+    categories = [];
+    table;
+    indexes = {};
+    colorPalette;
+    constructor(host) {
+        this.host = host;
+        this.colorPalette = host.colorPalette;
+        this.colorHelper = new powerbi_visuals_utils_colorutils__WEBPACK_IMPORTED_MODULE_1__/* .ColorHelper */ .A1(this.colorPalette);
+    }
+    minPoints(points) {
+        let minPoint;
+        for (const [index, point] of points.entries()) {
+            if (index === 0) {
+                minPoint = point;
+            }
+            if (point.lat < minPoint.lat)
+                minPoint.lat = point.lat;
+            if (point.lng < minPoint.lng)
+                minPoint.lng = point.lng;
         }
-        else {
+        return minPoint;
+    }
+    maxPoints(points) {
+        let maxPoint;
+        for (const [index, point] of points.entries()) {
+            if (point.lat > maxPoint.lat)
+                maxPoint.lat = point.lat;
+            if (point.lng > maxPoint.lng)
+                maxPoint.lng = point.lng;
+        }
+        return maxPoint;
+    }
+    parseTable(options) {
+        this.table = options.dataViews[0].table;
+        this.categories = [];
+        this.lineConfigs = {};
+        this.lines = [];
+        // hent indekser fra tabellen
+        for (let keyIndex = 0; keyIndex < this.table.columns.length; keyIndex++) {
+            for (const key of Object.keys(this.table.columns[keyIndex].roles)) {
+                this.indexes[key] = keyIndex;
+            }
+        }
+        //del opp dataen i linjer
+        let objects = options.dataViews[0].metadata.objects;
+        for (const row of this.table.rows) {
+            verifyNumber(row);
+            const lineId = row[this.indexes["cable_id"]];
+            const lineX = row[this.indexes["cable_x"]];
+            const lineY = row[this.indexes["cable_y"]];
+            const lineZ = row[this.indexes["cable_z"]];
+            let categoryIsUnique = true;
+            let lineCategory;
+            for (const [index, category] of this.categories.entries()) {
+                if (category.id === row[this.indexes["category"]]) {
+                    categoryIsUnique = false;
+                    lineCategory = category;
+                    break;
+                }
+            }
+            if (categoryIsUnique) {
+                lineCategory = {
+                    id: row[this.indexes["category"]],
+                    color: this.colorHelper.getColorForSeriesValue(objects, row[this.indexes["category"]]),
+                    identity: this.host.createSelectionIdBuilder().createSelectionId()
+                };
+                this.categories.push(lineCategory);
+            }
+            const config = {
+                positions: [[lineX, lineY]],
+                depth: lineZ,
+                category: lineCategory
+            };
+            if (lineId in this.lineConfigs) {
+                this.lineConfigs[lineId].push(config);
+            }
+            else {
+                this.lineConfigs[lineId] = [config];
+            }
+        }
+        for (const [key, configs] of Object.entries(this.lineConfigs)) {
+            let previousConfig;
+            for (const config of configs) {
+                this.lines.push(new LineSegment(config));
+                if (previousConfig) {
+                    previousConfig.positions.push(config.positions[0]);
+                }
+                previousConfig = config;
+            }
         }
     }
 }
@@ -153,61 +246,593 @@ class Visual {
     map;
     cordDict = {};
     cords = [];
+    lineData;
     constructor(options) {
         this.formattingSettingsService = new powerbi_visuals_utils_formattingmodel__WEBPACK_IMPORTED_MODULE_0__/* .FormattingSettingsService */ .O();
         this.target = options.element;
+        this.lineData = new LineData(options.host);
         if (document) {
             const map_element = document.createElement("div");
             map_element.id = "map";
             this.target.appendChild(map_element);
-            this.map = (0,leaflet__WEBPACK_IMPORTED_MODULE_1__.map)(map_element).setView([0, 0], 13);
-            (0,leaflet__WEBPACK_IMPORTED_MODULE_1__.tileLayer)('https://tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(this.map);
+            this.map = (0,leaflet__WEBPACK_IMPORTED_MODULE_2__.map)(map_element).setView([59.75041174941852, 10.153830077740539], 13);
+            (0,leaflet__WEBPACK_IMPORTED_MODULE_2__.tileLayer)('https://tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(this.map);
         }
     }
     update(options) {
         //hent nye verdier
-        this.formattingSettings = this.formattingSettingsService.populateFormattingSettingsModel(_settings__WEBPACK_IMPORTED_MODULE_2__/* .VisualFormattingSettingsModel */ .S, options.dataViews[0]);
-        const columns = options.dataViews[0].table.columns;
-        //resett tidligere verdier
-        for (const cord of this.cords) {
-            cord.remove();
+        this.formattingSettings = this.formattingSettingsService.populateFormattingSettingsModel(_settings__WEBPACK_IMPORTED_MODULE_3__/* .VisualFormattingSettingsModel */ .S, options.dataViews[0]);
+        console.log(this.formattingSettings.dataPointCard.slices);
+        this.formattingSettings.populateDataPointSlices(this.lineData.categories);
+        let renderedLines = [];
+        for (const line of renderedLines) {
+            line.remove();
         }
-        this.cords = [];
-        this.cordDict = {};
-        // hent dataindekser
-        let indexes = {};
-        let hasId = false;
-        for (let keyIndex = 0; keyIndex < columns.length; keyIndex++) {
-            for (const key of Object.keys(columns[keyIndex].roles)) {
-                if (key == "cable_id")
-                    hasId = true;
-                indexes[key] = keyIndex;
-            }
+        this.lineData.parseTable(options);
+        for (const [index, category] of this.lineData.categories.entries()) {
+            category.color = this.formattingSettings.dataPointCard.slices[index]["value"]["value"];
         }
-        for (const row of options.dataViews[0].table.rows) {
-            verifyNumber(row);
-            let cableIndex = 0;
-            if (hasId)
-                cableIndex = row[indexes["cable_id"]];
-            //ser om ledningen er i ordboken, hvis ikke lager den en ny ledning
-            if (this.cordDict[cableIndex]) {
-                this.cordDict[cableIndex].push((0,leaflet__WEBPACK_IMPORTED_MODULE_1__.latLng)(row[indexes["cable_x"]], row[indexes["cable_y"]]));
-            }
-            else {
-                this.cordDict[cableIndex] = [(0,leaflet__WEBPACK_IMPORTED_MODULE_1__.latLng)(row[indexes["cable_x"]], row[indexes["cable_y"]])];
-            }
+        for (const [key, line] of Object.entries(this.lineData.lines)) {
+            console.log(line.category);
+            let lineRender = line.render(.5);
+            renderedLines.push(lineRender);
+            lineRender.addTo(this.map);
         }
-        for (const [key, line] of Object.entries(this.cordDict)) {
-            let newCord = (0,leaflet__WEBPACK_IMPORTED_MODULE_1__.polyline)(line, { color: "red" }).addTo(this.map);
-            this.cords.push(newCord);
-        }
-        this.map.fitBounds(this.cords[0].getBounds());
     }
     getFormattingModel() {
         return this.formattingSettingsService.buildFormattingModel(this.formattingSettings);
     }
 }
 
+
+/***/ }),
+
+/***/ 271:
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   pM: () => (/* binding */ getFillColor)
+/* harmony export */ });
+/* unused harmony exports getValue, getObject, getCommonValue */
+/* harmony import */ var _dataViewObject__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(888);
+
+/** Gets the value of the given object/property pair. */
+function getValue(objects, propertyId, defaultValue) {
+    if (!objects) {
+        return defaultValue;
+    }
+    return _dataViewObject__WEBPACK_IMPORTED_MODULE_0__/* .getValue */ ._(objects[propertyId.objectName], propertyId.propertyName, defaultValue);
+}
+/** Gets an object from objects. */
+function getObject(objects, objectName, defaultValue) {
+    if (objects && objects[objectName]) {
+        return objects[objectName];
+    }
+    return defaultValue;
+}
+/** Gets the solid color from a fill property. */
+function getFillColor(objects, propertyId, defaultColor) {
+    const value = getValue(objects, propertyId);
+    if (!value || !value.solid) {
+        return defaultColor;
+    }
+    return value.solid.color;
+}
+function getCommonValue(objects, propertyId, defaultValue) {
+    const value = getValue(objects, propertyId, defaultValue);
+    if (value && value.solid) {
+        return value.solid.color;
+    }
+    if (value === undefined
+        || value === null
+        || (typeof value === "object" && !value.solid)) {
+        return defaultValue;
+    }
+    return value;
+}
+//# sourceMappingURL=dataViewObjects.js.map
+
+/***/ }),
+
+/***/ 442:
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   hA: () => (/* binding */ ensureInRange)
+/* harmony export */ });
+/* unused harmony exports MIN_VALUE, MAX_VALUE, MIN_EXP, MAX_EXP, EPSILON, DEFAULT_PRECISION, DEFAULT_PRECISION_IN_DECIMAL_DIGITS, LOG_E_10, POSITIVE_POWERS, NEGATIVE_POWERS, pow10, log10, getPrecision, equalWithPrecision, lessWithPrecision, lessOrEqualWithPrecision, greaterWithPrecision, greaterOrEqualWithPrecision, floorWithPrecision, ceilWithPrecision, floorToPrecision, ceilToPrecision, roundToPrecision, round, project, removeDecimalNoise, isInteger, toIncrement, detectPrecision */
+/*
+*  Power BI Visualizations
+*
+*  Copyright (c) Microsoft Corporation
+*  All rights reserved.
+*  MIT License
+*
+*  Permission is hereby granted, free of charge, to any person obtaining a copy
+*  of this software and associated documentation files (the ""Software""), to deal
+*  in the Software without restriction, including without limitation the rights
+*  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+*  copies of the Software, and to permit persons to whom the Software is
+*  furnished to do so, subject to the following conditions:
+*
+*  The above copyright notice and this permission notice shall be included in
+*  all copies or substantial portions of the Software.
+*
+*  THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+*  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+*  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+*  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+*  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+*  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+*  THE SOFTWARE.
+*/
+/**
+ * Module Double contains a set of constants and precision based utility methods
+ * for dealing with doubles and their decimal garbage in the javascript.
+ */
+// Constants.
+const MIN_VALUE = -Number.MAX_VALUE;
+const MAX_VALUE = Number.MAX_VALUE;
+const MIN_EXP = (/* unused pure expression or super */ null && (-308));
+const MAX_EXP = 308;
+const EPSILON = 1E-323;
+const DEFAULT_PRECISION = 0.0001;
+const DEFAULT_PRECISION_IN_DECIMAL_DIGITS = 12;
+const LOG_E_10 = Math.log(10);
+const POSITIVE_POWERS = (/* unused pure expression or super */ null && ([
+    1E0, 1E1, 1E2, 1E3, 1E4, 1E5, 1E6, 1E7, 1E8, 1E9, 1E10, 1E11, 1E12, 1E13, 1E14, 1E15, 1E16, 1E17, 1E18, 1E19, 1E20, 1E21, 1E22, 1E23, 1E24, 1E25, 1E26, 1E27, 1E28, 1E29, 1E30, 1E31, 1E32, 1E33, 1E34, 1E35, 1E36, 1E37, 1E38, 1E39, 1E40, 1E41, 1E42, 1E43, 1E44, 1E45, 1E46, 1E47, 1E48, 1E49, 1E50, 1E51, 1E52, 1E53, 1E54, 1E55, 1E56, 1E57, 1E58, 1E59, 1E60, 1E61, 1E62, 1E63, 1E64, 1E65, 1E66, 1E67, 1E68, 1E69, 1E70, 1E71, 1E72, 1E73, 1E74, 1E75, 1E76, 1E77, 1E78, 1E79, 1E80, 1E81, 1E82, 1E83, 1E84, 1E85, 1E86, 1E87, 1E88, 1E89, 1E90, 1E91, 1E92, 1E93, 1E94, 1E95, 1E96, 1E97, 1E98, 1E99,
+    1E100, 1E101, 1E102, 1E103, 1E104, 1E105, 1E106, 1E107, 1E108, 1E109, 1E110, 1E111, 1E112, 1E113, 1E114, 1E115, 1E116, 1E117, 1E118, 1E119, 1E120, 1E121, 1E122, 1E123, 1E124, 1E125, 1E126, 1E127, 1E128, 1E129, 1E130, 1E131, 1E132, 1E133, 1E134, 1E135, 1E136, 1E137, 1E138, 1E139, 1E140, 1E141, 1E142, 1E143, 1E144, 1E145, 1E146, 1E147, 1E148, 1E149, 1E150, 1E151, 1E152, 1E153, 1E154, 1E155, 1E156, 1E157, 1E158, 1E159, 1E160, 1E161, 1E162, 1E163, 1E164, 1E165, 1E166, 1E167, 1E168, 1E169, 1E170, 1E171, 1E172, 1E173, 1E174, 1E175, 1E176, 1E177, 1E178, 1E179, 1E180, 1E181, 1E182, 1E183, 1E184, 1E185, 1E186, 1E187, 1E188, 1E189, 1E190, 1E191, 1E192, 1E193, 1E194, 1E195, 1E196, 1E197, 1E198, 1E199,
+    1E200, 1E201, 1E202, 1E203, 1E204, 1E205, 1E206, 1E207, 1E208, 1E209, 1E210, 1E211, 1E212, 1E213, 1E214, 1E215, 1E216, 1E217, 1E218, 1E219, 1E220, 1E221, 1E222, 1E223, 1E224, 1E225, 1E226, 1E227, 1E228, 1E229, 1E230, 1E231, 1E232, 1E233, 1E234, 1E235, 1E236, 1E237, 1E238, 1E239, 1E240, 1E241, 1E242, 1E243, 1E244, 1E245, 1E246, 1E247, 1E248, 1E249, 1E250, 1E251, 1E252, 1E253, 1E254, 1E255, 1E256, 1E257, 1E258, 1E259, 1E260, 1E261, 1E262, 1E263, 1E264, 1E265, 1E266, 1E267, 1E268, 1E269, 1E270, 1E271, 1E272, 1E273, 1E274, 1E275, 1E276, 1E277, 1E278, 1E279, 1E280, 1E281, 1E282, 1E283, 1E284, 1E285, 1E286, 1E287, 1E288, 1E289, 1E290, 1E291, 1E292, 1E293, 1E294, 1E295, 1E296, 1E297, 1E298, 1E299,
+    1E300, 1E301, 1E302, 1E303, 1E304, 1E305, 1E306, 1E307, 1E308
+]));
+const NEGATIVE_POWERS = (/* unused pure expression or super */ null && ([
+    1E0, 1E-1, 1E-2, 1E-3, 1E-4, 1E-5, 1E-6, 1E-7, 1E-8, 1E-9, 1E-10, 1E-11, 1E-12, 1E-13, 1E-14, 1E-15, 1E-16, 1E-17, 1E-18, 1E-19, 1E-20, 1E-21, 1E-22, 1E-23, 1E-24, 1E-25, 1E-26, 1E-27, 1E-28, 1E-29, 1E-30, 1E-31, 1E-32, 1E-33, 1E-34, 1E-35, 1E-36, 1E-37, 1E-38, 1E-39, 1E-40, 1E-41, 1E-42, 1E-43, 1E-44, 1E-45, 1E-46, 1E-47, 1E-48, 1E-49, 1E-50, 1E-51, 1E-52, 1E-53, 1E-54, 1E-55, 1E-56, 1E-57, 1E-58, 1E-59, 1E-60, 1E-61, 1E-62, 1E-63, 1E-64, 1E-65, 1E-66, 1E-67, 1E-68, 1E-69, 1E-70, 1E-71, 1E-72, 1E-73, 1E-74, 1E-75, 1E-76, 1E-77, 1E-78, 1E-79, 1E-80, 1E-81, 1E-82, 1E-83, 1E-84, 1E-85, 1E-86, 1E-87, 1E-88, 1E-89, 1E-90, 1E-91, 1E-92, 1E-93, 1E-94, 1E-95, 1E-96, 1E-97, 1E-98, 1E-99,
+    1E-100, 1E-101, 1E-102, 1E-103, 1E-104, 1E-105, 1E-106, 1E-107, 1E-108, 1E-109, 1E-110, 1E-111, 1E-112, 1E-113, 1E-114, 1E-115, 1E-116, 1E-117, 1E-118, 1E-119, 1E-120, 1E-121, 1E-122, 1E-123, 1E-124, 1E-125, 1E-126, 1E-127, 1E-128, 1E-129, 1E-130, 1E-131, 1E-132, 1E-133, 1E-134, 1E-135, 1E-136, 1E-137, 1E-138, 1E-139, 1E-140, 1E-141, 1E-142, 1E-143, 1E-144, 1E-145, 1E-146, 1E-147, 1E-148, 1E-149, 1E-150, 1E-151, 1E-152, 1E-153, 1E-154, 1E-155, 1E-156, 1E-157, 1E-158, 1E-159, 1E-160, 1E-161, 1E-162, 1E-163, 1E-164, 1E-165, 1E-166, 1E-167, 1E-168, 1E-169, 1E-170, 1E-171, 1E-172, 1E-173, 1E-174, 1E-175, 1E-176, 1E-177, 1E-178, 1E-179, 1E-180, 1E-181, 1E-182, 1E-183, 1E-184, 1E-185, 1E-186, 1E-187, 1E-188, 1E-189, 1E-190, 1E-191, 1E-192, 1E-193, 1E-194, 1E-195, 1E-196, 1E-197, 1E-198, 1E-199,
+    1E-200, 1E-201, 1E-202, 1E-203, 1E-204, 1E-205, 1E-206, 1E-207, 1E-208, 1E-209, 1E-210, 1E-211, 1E-212, 1E-213, 1E-214, 1E-215, 1E-216, 1E-217, 1E-218, 1E-219, 1E-220, 1E-221, 1E-222, 1E-223, 1E-224, 1E-225, 1E-226, 1E-227, 1E-228, 1E-229, 1E-230, 1E-231, 1E-232, 1E-233, 1E-234, 1E-235, 1E-236, 1E-237, 1E-238, 1E-239, 1E-240, 1E-241, 1E-242, 1E-243, 1E-244, 1E-245, 1E-246, 1E-247, 1E-248, 1E-249, 1E-250, 1E-251, 1E-252, 1E-253, 1E-254, 1E-255, 1E-256, 1E-257, 1E-258, 1E-259, 1E-260, 1E-261, 1E-262, 1E-263, 1E-264, 1E-265, 1E-266, 1E-267, 1E-268, 1E-269, 1E-270, 1E-271, 1E-272, 1E-273, 1E-274, 1E-275, 1E-276, 1E-277, 1E-278, 1E-279, 1E-280, 1E-281, 1E-282, 1E-283, 1E-284, 1E-285, 1E-286, 1E-287, 1E-288, 1E-289, 1E-290, 1E-291, 1E-292, 1E-293, 1E-294, 1E-295, 1E-296, 1E-297, 1E-298, 1E-299,
+    1E-300, 1E-301, 1E-302, 1E-303, 1E-304, 1E-305, 1E-306, 1E-307, 1E-308, 1E-309, 1E-310, 1E-311, 1E-312, 1E-313, 1E-314, 1E-315, 1E-316, 1E-317, 1E-318, 1E-319, 1E-320, 1E-321, 1E-322, 1E-323, 1E-324
+]));
+/**
+ * Returns powers of 10.
+ * Unlike the Math.pow this function produces no decimal garbage.
+ * @param exp Exponent.
+ */
+function pow10(exp) {
+    // Positive & zero
+    if (exp >= 0) {
+        if (exp < POSITIVE_POWERS.length) {
+            return POSITIVE_POWERS[exp];
+        }
+        else {
+            return Infinity;
+        }
+    }
+    // Negative
+    exp = -exp;
+    if (exp > 0 && exp < NEGATIVE_POWERS.length) { // if exp==int.MIN_VALUE then changing the sign will overflow and keep the number negative - we need to check for exp > 0 to filter out this corner case
+        return NEGATIVE_POWERS[exp];
+    }
+    else {
+        return 0;
+    }
+}
+/**
+ * Returns the 10 base logarithm of the number.
+ * Unlike Math.log function this produces integer results with no decimal garbage.
+ * @param val Positive value or zero.
+ */
+// eslint-disable-next-line max-lines-per-function
+function log10(val) {
+    // Fast Log10() algorithm
+    if (val > 1 && val < 1E16) {
+        if (val < 1E8) {
+            if (val < 1E4) {
+                if (val < 1E2) {
+                    if (val < 1E1) {
+                        return 0;
+                    }
+                    else {
+                        return 1;
+                    }
+                }
+                else {
+                    if (val < 1E3) {
+                        return 2;
+                    }
+                    else {
+                        return 3;
+                    }
+                }
+            }
+            else {
+                if (val < 1E6) {
+                    if (val < 1E5) {
+                        return 4;
+                    }
+                    else {
+                        return 5;
+                    }
+                }
+                else {
+                    if (val < 1E7) {
+                        return 6;
+                    }
+                    else {
+                        return 7;
+                    }
+                }
+            }
+        }
+        else {
+            if (val < 1E12) {
+                if (val < 1E10) {
+                    if (val < 1E9) {
+                        return 8;
+                    }
+                    else {
+                        return 9;
+                    }
+                }
+                else {
+                    if (val < 1E11) {
+                        return 10;
+                    }
+                    else {
+                        return 11;
+                    }
+                }
+            }
+            else {
+                if (val < 1E14) {
+                    if (val < 1E13) {
+                        return 12;
+                    }
+                    else {
+                        return 13;
+                    }
+                }
+                else {
+                    if (val < 1E15) {
+                        return 14;
+                    }
+                    else {
+                        return 15;
+                    }
+                }
+            }
+        }
+    }
+    if (val > 1E-16 && val < 1) {
+        if (val < 1E-8) {
+            if (val < 1E-12) {
+                if (val < 1E-14) {
+                    if (val < 1E-15) {
+                        return -16;
+                    }
+                    else {
+                        return -15;
+                    }
+                }
+                else {
+                    if (val < 1E-13) {
+                        return -14;
+                    }
+                    else {
+                        return -13;
+                    }
+                }
+            }
+            else {
+                if (val < 1E-10) {
+                    if (val < 1E-11) {
+                        return -12;
+                    }
+                    else {
+                        return -11;
+                    }
+                }
+                else {
+                    if (val < 1E-9) {
+                        return -10;
+                    }
+                    else {
+                        return -9;
+                    }
+                }
+            }
+        }
+        else {
+            if (val < 1E-4) {
+                if (val < 1E-6) {
+                    if (val < 1E-7) {
+                        return -8;
+                    }
+                    else {
+                        return -7;
+                    }
+                }
+                else {
+                    if (val < 1E-5) {
+                        return -6;
+                    }
+                    else {
+                        return -5;
+                    }
+                }
+            }
+            else {
+                if (val < 1E-2) {
+                    if (val < 1E-3) {
+                        return -4;
+                    }
+                    else {
+                        return -3;
+                    }
+                }
+                else {
+                    if (val < 1E-1) {
+                        return -2;
+                    }
+                    else {
+                        return -1;
+                    }
+                }
+            }
+        }
+    }
+    // JS Math provides only natural log function so we need to calc the 10 base logarithm:
+    // logb(x) = logk(x)/logk(b);
+    const log10 = Math.log(val) / LOG_E_10;
+    return floorWithPrecision(log10);
+}
+/**
+ * Returns a power of 10 representing precision of the number based on the number of meaningful decimal digits.
+ * For example the precision of 56,263.3767 with the 6 meaningful decimal digit is 0.1.
+ * @param x Value.
+ * @param decimalDigits How many decimal digits are meaningfull.
+ */
+function getPrecision(x, decimalDigits) {
+    if (decimalDigits === undefined) {
+        decimalDigits = DEFAULT_PRECISION_IN_DECIMAL_DIGITS;
+    }
+    if (!x || !isFinite(x)) {
+        return undefined;
+    }
+    const exp = log10(Math.abs(x));
+    if (exp < MIN_EXP) {
+        return 0;
+    }
+    const precisionExp = Math.max(exp - decimalDigits, -NEGATIVE_POWERS.length + 1);
+    return pow10(precisionExp);
+}
+/**
+ * Checks if a delta between 2 numbers is less than provided precision.
+ * @param x One value.
+ * @param y Another value.
+ * @param precision Precision value.
+ */
+function equalWithPrecision(x, y, precision) {
+    precision = detectPrecision(precision, x, y);
+    return x === y || Math.abs(x - y) < precision;
+}
+/**
+ * Checks if a first value is less than another taking
+ * into account the loose precision based equality.
+ * @param x One value.
+ * @param y Another value.
+ * @param precision Precision value.
+ */
+function lessWithPrecision(x, y, precision) {
+    precision = detectPrecision(precision, x, y);
+    return x < y && Math.abs(x - y) > precision;
+}
+/**
+ * Checks if a first value is less or equal than another taking
+ * into account the loose precision based equality.
+ * @param x One value.
+ * @param y Another value.
+ * @param precision Precision value.
+ */
+function lessOrEqualWithPrecision(x, y, precision) {
+    precision = detectPrecision(precision, x, y);
+    return x < y || Math.abs(x - y) < precision;
+}
+/**
+ * Checks if a first value is greater than another taking
+ * into account the loose precision based equality.
+ * @param x One value.
+ * @param y Another value.
+ * @param precision Precision value.
+ */
+function greaterWithPrecision(x, y, precision) {
+    precision = detectPrecision(precision, x, y);
+    return x > y && Math.abs(x - y) > precision;
+}
+/**
+ * Checks if a first value is greater or equal to another taking
+ * into account the loose precision based equality.
+ * @param x One value.
+ * @param y Another value.
+ * @param precision Precision value.
+ */
+function greaterOrEqualWithPrecision(x, y, precision) {
+    precision = detectPrecision(precision, x, y);
+    return x > y || Math.abs(x - y) < precision;
+}
+/**
+ * Floors the number unless it's withing the precision distance from the higher int.
+ * @param x One value.
+ * @param precision Precision value.
+ */
+function floorWithPrecision(x, precision) {
+    precision = precision != null ? precision : DEFAULT_PRECISION;
+    const roundX = Math.round(x);
+    if (Math.abs(x - roundX) < precision) {
+        return roundX;
+    }
+    else {
+        return Math.floor(x);
+    }
+}
+/**
+ * Ceils the number unless it's withing the precision distance from the lower int.
+ * @param x One value.
+ * @param precision Precision value.
+ */
+function ceilWithPrecision(x, precision) {
+    precision = detectPrecision(precision, DEFAULT_PRECISION);
+    const roundX = Math.round(x);
+    if (Math.abs(x - roundX) < precision) {
+        return roundX;
+    }
+    else {
+        return Math.ceil(x);
+    }
+}
+/**
+ * Floors the number to the provided precision.
+ * For example 234,578 floored to 1,000 precision is 234,000.
+ * @param x One value.
+ * @param precision Precision value.
+ */
+function floorToPrecision(x, precision) {
+    precision = detectPrecision(precision, DEFAULT_PRECISION);
+    if (precision === 0 || x === 0) {
+        return x;
+    }
+    // Precision must be a Power of 10
+    return Math.floor(x / precision) * precision;
+}
+/**
+ * Ceils the number to the provided precision.
+ * For example 234,578 floored to 1,000 precision is 235,000.
+ * @param x One value.
+ * @param precision Precision value.
+ */
+function ceilToPrecision(x, precision) {
+    precision = detectPrecision(precision, DEFAULT_PRECISION);
+    if (precision === 0 || x === 0) {
+        return x;
+    }
+    // Precision must be a Power of 10
+    return Math.ceil(x / precision) * precision;
+}
+/**
+ * Rounds the number to the provided precision.
+ * For example 234,578 floored to 1,000 precision is 235,000.
+ * @param x One value.
+ * @param precision Precision value.
+ */
+function roundToPrecision(x, precision) {
+    precision = detectPrecision(precision, DEFAULT_PRECISION);
+    if (precision === 0 || x === 0) {
+        return x;
+    }
+    // Precision must be a Power of 10
+    let result = Math.round(x / precision) * precision;
+    const decimalDigits = Math.round(log10(Math.abs(x)) - log10(precision)) + 1;
+    if (decimalDigits > 0 && decimalDigits < 16) {
+        result = parseFloat(result.toPrecision(decimalDigits));
+    }
+    return result;
+}
+/**
+ * Returns the value making sure that it's restricted to the provided range.
+ * @param x One value.
+ * @param min Range min boundary.
+ * @param max Range max boundary.
+ */
+function ensureInRange(x, min, max) {
+    if (x === undefined || x === null) {
+        return x;
+    }
+    if (x < min) {
+        return min;
+    }
+    if (x > max) {
+        return max;
+    }
+    return x;
+}
+/**
+ * Rounds the value - this method is actually faster than Math.round - used in the graphics utils.
+ * @param x Value to round.
+ */
+function round(x) {
+    return (0.5 + x) << 0;
+}
+/**
+ * Projects the value from the source range into the target range.
+ * @param value Value to project.
+ * @param fromMin Minimum of the source range.
+ * @param toMin Minimum of the target range.
+ * @param toMax Maximum of the target range.
+ */
+function project(value, fromMin, fromSize, toMin, toSize) {
+    if (fromSize === 0 || toSize === 0) {
+        if (fromMin <= value && value <= fromMin + fromSize) {
+            return toMin;
+        }
+        else {
+            return NaN;
+        }
+    }
+    const relativeX = (value - fromMin) / fromSize;
+    const projectedX = toMin + relativeX * toSize;
+    return projectedX;
+}
+/**
+ * Removes decimal noise.
+ * @param value Value to be processed.
+ */
+function removeDecimalNoise(value) {
+    return roundToPrecision(value, getPrecision(value));
+}
+/**
+ * Checks whether the number is integer.
+ * @param value Value to be checked.
+ */
+function isInteger(value) {
+    return value !== null && value % 1 === 0;
+}
+/**
+ * Dividing by increment will give us count of increments
+ * Round out the rough edges into even integer
+ * Multiply back by increment to get rounded value
+ * e.g. Rounder.toIncrement(0.647291, 0.05) => 0.65
+ * @param value - value to round to nearest increment
+ * @param increment - smallest increment to round toward
+ */
+function toIncrement(value, increment) {
+    return Math.round(value / increment) * increment;
+}
+/**
+ * Overrides the given precision with defaults if necessary. Exported only for tests
+ *
+ * precision defined returns precision
+ * x defined with y undefined returns twelve digits of precision based on x
+ * x defined but zero with y defined; returns twelve digits of precision based on y
+ * x and y defined retursn twelve digits of precision based on the minimum of the two
+ * if no applicable precision is found based on those (such as x and y being zero), the default precision is used
+ */
+function detectPrecision(precision, x, y) {
+    if (precision !== undefined) {
+        return precision;
+    }
+    let calculatedPrecision;
+    if (!y) {
+        calculatedPrecision = getPrecision(x);
+    }
+    else if (!x) {
+        calculatedPrecision = getPrecision(y);
+    }
+    else {
+        calculatedPrecision = getPrecision(Math.min(Math.abs(x), Math.abs(y)));
+    }
+    return calculatedPrecision || DEFAULT_PRECISION;
+}
+//# sourceMappingURL=double.js.map
 
 /***/ }),
 
@@ -15000,6 +15625,389 @@ class FormattingSettingsService {
 
 /***/ }),
 
+/***/ 708:
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   $e: () => (/* binding */ rgbBlend),
+/* harmony export */   Bt: () => (/* binding */ createLinearColorScale),
+/* harmony export */   IO: () => (/* binding */ parseColorString),
+/* harmony export */   KY: () => (/* binding */ calculateHighlightColor),
+/* harmony export */   ND: () => (/* binding */ hexToRGBString),
+/* harmony export */   NN: () => (/* binding */ rotate),
+/* harmony export */   Zb: () => (/* binding */ normalizeToHexString),
+/* harmony export */   e$: () => (/* binding */ darken),
+/* harmony export */   j$: () => (/* binding */ hexBlend),
+/* harmony export */   lp: () => (/* binding */ channelBlend),
+/* harmony export */   p8: () => (/* binding */ rgbString),
+/* harmony export */   xq: () => (/* binding */ shadeColor),
+/* harmony export */   zO: () => (/* binding */ hexString)
+/* harmony export */ });
+/* harmony import */ var powerbi_visuals_utils_typeutils__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(442);
+/*
+*  Power BI Visualizations
+*
+*  Copyright (c) Microsoft Corporation
+*  All rights reserved.
+*  MIT License
+*
+*  Permission is hereby granted, free of charge, to any person obtaining a copy
+*  of this software and associated documentation files (the ""Software""), to deal
+*  in the Software without restriction, including without limitation the rights
+*  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+*  copies of the Software, and to permit persons to whom the Software is
+*  furnished to do so, subject to the following conditions:
+*
+*  The above copyright notice and this permission notice shall be included in
+*  all copies or substantial portions of the Software.
+*
+*  THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+*  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+*  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+*  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+*  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+*  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+*  THE SOFTWARE.
+*/
+
+function hexToRGBString(hex, transparency) {
+    // Expand shorthand form (e.g. "03F") to full form (e.g. "0033FF")
+    const shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
+    hex = hex.replace(shorthandRegex, function (m, r, g, b) {
+        return r + r + g + g + b + b;
+    });
+    // Hex format which return the format r-g-b
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    const rgb = result ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16)
+    } : null;
+    // Wrong input
+    if (rgb === null) {
+        return "";
+    }
+    if (!transparency && transparency !== 0) {
+        return "rgb(" + rgb.r + "," + rgb.g + "," + rgb.b + ")";
+    }
+    else {
+        return "rgba(" + rgb.r + "," + rgb.g + "," + rgb.b + "," + transparency + ")";
+    }
+}
+function rotate(rgbString, rotateFactor) {
+    if (rotateFactor === 0)
+        return rgbString;
+    const originalRgb = parseColorString(rgbString);
+    const originalHsv = rgbToHsv(originalRgb);
+    const rotatedHsv = rotateHsv(originalHsv, rotateFactor);
+    const rotatedRgb = hsvToRgb(rotatedHsv);
+    return hexString(rotatedRgb);
+}
+function normalizeToHexString(color) {
+    const rgb = parseColorString(color);
+    return hexString(rgb);
+}
+function parseColorString(color) {
+    if (color.indexOf("#") >= 0) {
+        if (color.length === 7) {
+            // #RRGGBB
+            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(color);
+            if (result == null || result.length < 4)
+                return;
+            return {
+                R: parseInt(result[1], 16),
+                G: parseInt(result[2], 16),
+                B: parseInt(result[3], 16),
+            };
+        }
+        else if (color.length === 4) {
+            // #RGB
+            const result = /^#?([a-f\d])([a-f\d])([a-f\d])$/i.exec(color);
+            if (result == null || result.length < 4)
+                return;
+            return {
+                R: parseInt(result[1] + result[1], 16),
+                G: parseInt(result[2] + result[2], 16),
+                B: parseInt(result[3] + result[3], 16),
+            };
+        }
+    }
+    else if (color.indexOf("rgb(") >= 0) {
+        // rgb(R, G, B)
+        const result = /^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/.exec(color);
+        if (result == null || result.length < 4)
+            return;
+        return {
+            R: parseInt(result[1], 10),
+            G: parseInt(result[2], 10),
+            B: parseInt(result[3], 10),
+        };
+    }
+    else if (color.indexOf("rgba(") >= 0) {
+        // rgba(R, G, B, A)
+        const result = /^rgba\((\d+),\s*(\d+),\s*(\d+),\s*(\d*(?:\.\d+)?)\)$/.exec(color);
+        if (result == null || result.length < 5)
+            return;
+        return {
+            R: parseInt(result[1], 10),
+            G: parseInt(result[2], 10),
+            B: parseInt(result[3], 10),
+            A: parseFloat(result[4]),
+        };
+    }
+}
+function rgbToHsv(rgbColor) {
+    let s, h;
+    const r = rgbColor.R / 255, g = rgbColor.G / 255, b = rgbColor.B / 255;
+    const min = Math.min(r, Math.min(g, b));
+    const max = Math.max(r, Math.max(g, b));
+    const v = max;
+    const delta = max - min;
+    if (max === 0 || delta === 0) {
+        // R, G, and B must be 0.0, or all the same.
+        // In this case, S is 0.0, and H is undefined.
+        // Using H = 0.0 is as good as any...
+        s = 0;
+        h = 0;
+    }
+    else {
+        s = delta / max;
+        if (r === max) {
+            // Between Yellow and Magenta
+            h = (g - b) / delta;
+        }
+        else if (g === max) {
+            // Between Cyan and Yellow
+            h = 2 + (b - r) / delta;
+        }
+        else {
+            // Between Magenta and Cyan
+            h = 4 + (r - g) / delta;
+        }
+    }
+    // Scale h to be between 0.0 and 1.
+    // This may require adding 1, if the value
+    // is negative.
+    h /= 6;
+    if (h < 0) {
+        h += 1;
+    }
+    return {
+        H: h,
+        S: s,
+        V: v,
+    };
+}
+function hsvToRgb(hsvColor) {
+    let r, g, b;
+    const h = hsvColor.H, s = hsvColor.S, v = hsvColor.V;
+    if (s === 0) {
+        // If s is 0, all colors are the same.
+        // This is some flavor of gray.
+        r = v;
+        g = v;
+        b = v;
+    }
+    else {
+        // The color wheel consists of 6 sectors.
+        // Figure out which sector you//re in.
+        const sectorPos = h * 6;
+        const sectorNumber = Math.floor(sectorPos);
+        // get the fractional part of the sector.
+        // That is, how many degrees into the sector
+        // are you?
+        const fractionalSector = sectorPos - sectorNumber;
+        // Calculate values for the three axes
+        // of the color.
+        const p = v * (1.0 - s);
+        const q = v * (1.0 - (s * fractionalSector));
+        const t = v * (1.0 - (s * (1 - fractionalSector)));
+        // Assign the fractional colors to r, g, and b
+        // based on the sector the angle is in.
+        switch (sectorNumber) {
+            case 0:
+                r = v;
+                g = t;
+                b = p;
+                break;
+            case 1:
+                r = q;
+                g = v;
+                b = p;
+                break;
+            case 2:
+                r = p;
+                g = v;
+                b = t;
+                break;
+            case 3:
+                r = p;
+                g = q;
+                b = v;
+                break;
+            case 4:
+                r = t;
+                g = p;
+                b = v;
+                break;
+            case 5:
+                r = v;
+                g = p;
+                b = q;
+                break;
+        }
+    }
+    return {
+        R: Math.floor(r * 255),
+        G: Math.floor(g * 255),
+        B: Math.floor(b * 255),
+    };
+}
+function rotateHsv(hsvColor, rotateFactor) {
+    const newH = hsvColor.H + rotateFactor;
+    return {
+        H: newH > 1 ? newH - 1 : newH,
+        S: hsvColor.S,
+        V: hsvColor.V,
+    };
+}
+function darken(color, diff) {
+    const flooredNumber = Math.floor(diff);
+    return {
+        R: Math.max(0, color.R - flooredNumber),
+        G: Math.max(0, color.G - flooredNumber),
+        B: Math.max(0, color.B - flooredNumber),
+    };
+}
+function rgbString(color) {
+    if (color.A == null)
+        return "rgb(" + color.R + "," + color.G + "," + color.B + ")";
+    return "rgba(" + color.R + "," + color.G + "," + color.B + "," + color.A + ")";
+}
+function hexString(color) {
+    return "#" + componentToHex(color.R) + componentToHex(color.G) + componentToHex(color.B);
+}
+/**
+ * Overlays a color with opacity over a background color
+ * @param {string} foreColor Color to overlay
+ * @param {number} opacity number between 0 (transparent) to 1 (opaque)
+ * @param {string} backColor Background color
+ * @returns Result color
+ */
+function hexBlend(foreColor, opacity, backColor) {
+    return hexString(rgbBlend(parseColorString(foreColor), opacity, parseColorString(backColor)));
+}
+/**
+ * Overlays a color with opacity over a background color. Any alpha-channel is ignored.
+ * @param {RgbColor} foreColor Color to overlay
+ * @param {number} opacity number between 0 (transparent) to 1 (opaque). Any value out of range will be corrected.
+ * @param {RgbColor} backColor Background color
+ * @returns
+ */
+function rgbBlend(foreColor, opacity, backColor) {
+    // correct opacity
+    opacity = powerbi_visuals_utils_typeutils__WEBPACK_IMPORTED_MODULE_0__/* .ensureInRange */ .hA(opacity, 0, 1);
+    return {
+        R: channelBlend(foreColor.R, opacity, backColor.R),
+        G: channelBlend(foreColor.G, opacity, backColor.G),
+        B: channelBlend(foreColor.B, opacity, backColor.B)
+    };
+}
+/**
+ * Blend a single channel for two colors
+ * @param {number} foreChannel Channel of foreground color. Will be enforced to be between 0 and 255.
+ * @param {number} opacity opacity of the foreground color. Will be enforced to be between 0 and 1.
+ * @param {number} backChannel channel of the background color. Will be enforced to be between 0 and 255.
+ * @returns result channel value
+ */
+function channelBlend(foreChannel, opacity, backChannel) {
+    opacity = powerbi_visuals_utils_typeutils__WEBPACK_IMPORTED_MODULE_0__/* .ensureInRange */ .hA(opacity, 0, 1);
+    foreChannel = powerbi_visuals_utils_typeutils__WEBPACK_IMPORTED_MODULE_0__/* .ensureInRange */ .hA(foreChannel, 0, 255);
+    backChannel = powerbi_visuals_utils_typeutils__WEBPACK_IMPORTED_MODULE_0__/* .ensureInRange */ .hA(backChannel, 0, 255);
+    return Math.round((opacity * foreChannel) +
+        ((1 - opacity) * backChannel));
+}
+/**
+ * Calculate the highlight color from the rgbColor based on the lumianceThreshold and delta.
+ * @param {RgbColor} rgbColor The original color.
+ * @param {number} lumianceThreshold The lumiance threshold used, the highlight color will be brighter when the lumiance is smaller the threshold, otherwise the highlight color will be darker. Will be enforced to be between 0 and 1.
+ * @param {number} delta the highlight color will be calculated based on the delta. Will be enforced to be between 0 and 1. lumianceThreshold + delta cannot greater than 1.
+ * @returns result highlight color value
+ */
+function calculateHighlightColor(rgbColor, lumianceThreshold, delta) {
+    const hsvColor = rgbToHsv(rgbColor);
+    // For invalid lumianceThreshold and delta value, use default.
+    if (lumianceThreshold + delta > 1 || lumianceThreshold <= 0 || delta <= 0) {
+        lumianceThreshold = 0.8;
+        delta = 0.2;
+    }
+    // Make it lighter when the lumianceValue is less than 200, otherwise make it darker.
+    if (hsvColor.V < lumianceThreshold)
+        hsvColor.V = hsvColor.V + delta;
+    else
+        hsvColor.V = hsvColor.V - delta;
+    return hexString(hsvToRgb(hsvColor));
+}
+function componentToHex(hexComponent) {
+    const clamped = powerbi_visuals_utils_typeutils__WEBPACK_IMPORTED_MODULE_0__/* .ensureInRange */ .hA(hexComponent, 0, 255);
+    const hex = clamped.toString(16).toUpperCase();
+    return hex.length === 1 ? "0" + hex : hex;
+}
+function createLinearColorScale(domain, range, clamp) {
+    const rangeColors = range.map(v => parseColorString(v));
+    return value => {
+        // treat undefined and NULL as 0
+        if (value == null)
+            value = 0;
+        // Returns undefined for NaN values
+        if (isNaN(value))
+            return undefined;
+        if (clamp) {
+            if (value >= domain[domain.length - 1])
+                return range[range.length - 1];
+            if (value <= domain[0])
+                return range[0];
+        }
+        let domainMin, domainMax, rangeMin, rangeMax;
+        for (let i = 1, len = domain.length; i < len; i++) {
+            domainMin = domain[i - 1];
+            domainMax = domain[i];
+            if (domainMax === value) {
+                return range[i];
+            }
+            else if (value >= domainMin && value <= domainMax) {
+                rangeMin = rangeColors[i - 1];
+                rangeMax = rangeColors[i];
+                break;
+            }
+        }
+        const newValue = {
+            R: Math.round((((value - domainMin) * (rangeMax.R - rangeMin.R)) / (domainMax - domainMin)) + rangeMin.R),
+            G: Math.round((((value - domainMin) * (rangeMax.G - rangeMin.G)) / (domainMax - domainMin)) + rangeMin.G),
+            B: Math.round((((value - domainMin) * (rangeMax.B - rangeMin.B)) / (domainMax - domainMin)) + rangeMin.B)
+        };
+        return hexString(newValue);
+    };
+}
+/**
+ * Convert string hex expression to number, calculate percentage and R, G, B channels.
+ * Apply percentage for each channel and return back hex value as string with pound sign.
+ */
+function shadeColor(color, percent) {
+    const hexNum = parseInt(color.slice(1), 16);
+    const t = percent < 0 ? 0 : 255;
+    const p = percent < 0 ? percent * -1 : percent;
+    const R = hexNum >> 16;
+    const G = hexNum >> 8 & 0x00FF;
+    const B = hexNum & 0x0000FF;
+    const hexString = "#" + (0x1000000 + (Math.round((t - R) * p) + R) * 0x10000 + (Math.round((t - G) * p) + G) * 0x100 + (Math.round((t - B) * p) + B)).toString(16).slice(1);
+    return hexString;
+}
+//# sourceMappingURL=colorUtils.js.map
+
+/***/ }),
+
 /***/ 754:
 /***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
 
@@ -15008,11 +16016,9 @@ class FormattingSettingsService {
 /* harmony export */   Kx: () => (/* binding */ Model),
 /* harmony export */   St: () => (/* binding */ CompositeCard),
 /* harmony export */   Tn: () => (/* binding */ SimpleCard),
-/* harmony export */   iB: () => (/* binding */ NumUpDown),
-/* harmony export */   jF: () => (/* binding */ ToggleSwitch),
 /* harmony export */   sk: () => (/* binding */ ColorPicker)
 /* harmony export */ });
-/* unused harmony exports CardGroupEntity, Group, SimpleSlice, AlignmentGroup, Slider, DatePicker, ItemDropdown, AutoDropdown, DurationPicker, ErrorRangeControl, FieldPicker, ItemFlagsSelection, AutoFlagsSelection, TextInput, TextArea, FontPicker, GradientBar, ImageUpload, ListEditor, ReadOnlyText, ShapeMapSelector, CompositeSlice, FontControl, MarginPadding, Container, ContainerItem */
+/* unused harmony exports CardGroupEntity, Group, SimpleSlice, AlignmentGroup, ToggleSwitch, NumUpDown, Slider, DatePicker, ItemDropdown, AutoDropdown, DurationPicker, ErrorRangeControl, FieldPicker, ItemFlagsSelection, AutoFlagsSelection, TextInput, TextArea, FontPicker, GradientBar, ImageUpload, ListEditor, ReadOnlyText, ShapeMapSelector, CompositeSlice, FontControl, MarginPadding, Container, ContainerItem */
 /* harmony import */ var _utils_FormattingSettingsUtils__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(639);
 /**
  * Powerbi utils components classes for custom visual formatting pane objects
@@ -15323,6 +16329,157 @@ class Container extends NamedEntity {
 class ContainerItem extends (/* unused pure expression or super */ null && (NamedEntity)) {
 }
 //# sourceMappingURL=FormattingSettingsComponents.js.map
+
+/***/ }),
+
+/***/ 817:
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   A: () => (/* binding */ ColorHelper)
+/* harmony export */ });
+/* harmony import */ var powerbi_visuals_utils_dataviewutils__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(271);
+/*
+ *  Power BI Visualizations
+ *
+ *  Copyright (c) Microsoft Corporation
+ *  All rights reserved.
+ *  MIT License
+ *
+ *  Permission is hereby granted, free of charge, to any person obtaining a copy
+ *  of this software and associated documentation files (the ""Software""), to deal
+ *  in the Software without restriction, including without limitation the rights
+ *  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ *  copies of the Software, and to permit persons to whom the Software is
+ *  furnished to do so, subject to the following conditions:
+ *
+ *  The above copyright notice and this permission notice shall be included in
+ *  all copies or substantial portions of the Software.
+ *
+ *  THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ *  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ *  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ *  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ *  THE SOFTWARE.
+ */
+
+class ColorHelper {
+    constructor(colors, fillProp, defaultDataPointColor) {
+        this.colorPalette = colors;
+        this.fillProp = fillProp;
+        this.defaultDataPointColor = defaultDataPointColor;
+    }
+    /**
+     * Gets the color for the given series value.
+     * If no explicit color or default color has been set then the color is
+     * allocated from the color scale for this series.
+     */
+    getColorForSeriesValue(objects, value, themeColorName) {
+        if (this.isHighContrast) {
+            return this.getThemeColor(themeColorName);
+        }
+        return (this.fillProp && powerbi_visuals_utils_dataviewutils__WEBPACK_IMPORTED_MODULE_0__/* .getFillColor */ .pM(objects, this.fillProp))
+            || this.defaultDataPointColor
+            || this.colorPalette.getColor(String(value)).value;
+    }
+    /**
+     * Gets the color for the given measure.
+     */
+    getColorForMeasure(objects, measureKey, themeColorName) {
+        if (this.isHighContrast) {
+            return this.getThemeColor(themeColorName);
+        }
+        // Note, this allocates the color from the scale regardless of if we use it or not which helps keep colors stable.
+        const scaleColor = this.colorPalette.getColor(measureKey).value;
+        return (this.fillProp && powerbi_visuals_utils_dataviewutils__WEBPACK_IMPORTED_MODULE_0__/* .getFillColor */ .pM(objects, this.fillProp))
+            || this.defaultDataPointColor
+            || scaleColor;
+    }
+    static normalizeSelector(selector, isSingleSeries) {
+        // For dynamic series charts, colors are set per category.  So, exclude any measure (metadata repetition) from the selector.
+        if (selector && (isSingleSeries || selector.data)) {
+            return { data: selector.data };
+        }
+        return selector;
+    }
+    get isHighContrast() {
+        return !!(this.colorPalette && this.colorPalette.isHighContrast);
+    }
+    getThemeColor(themeColorName = "background") {
+        return this.colorPalette
+            && this.colorPalette[themeColorName]
+            && this.colorPalette[themeColorName].value;
+    }
+    getHighContrastColor(themeColorName = "background", defaultColor) {
+        return this.isHighContrast
+            ? this.getThemeColor(themeColorName)
+            : defaultColor;
+    }
+}
+//# sourceMappingURL=colorHelper.js.map
+
+/***/ }),
+
+/***/ 888:
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   _: () => (/* binding */ getValue)
+/* harmony export */ });
+/* unused harmony export getFillColorByPropertyName */
+function getValue(object, propertyName, defaultValue) {
+    if (!object) {
+        return defaultValue;
+    }
+    const propertyValue = object[propertyName];
+    if (propertyValue === undefined) {
+        return defaultValue;
+    }
+    return propertyValue;
+}
+/** Gets the solid color from a fill property using only a propertyName */
+function getFillColorByPropertyName(object, propertyName, defaultColor) {
+    const value = getValue(object, propertyName);
+    if (!value || !value.solid) {
+        return defaultColor;
+    }
+    return value.solid.color;
+}
+//# sourceMappingURL=dataViewObject.js.map
+
+/***/ }),
+
+/***/ 986:
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   A1: () => (/* reexport safe */ _colorHelper__WEBPACK_IMPORTED_MODULE_1__.A)
+/* harmony export */ });
+/* unused harmony exports calculateHighlightColor, channelBlend, createLinearColorScale, darken, hexBlend, hexString, hexToRGBString, normalizeToHexString, parseColorString, rgbBlend, rgbString, rotate, shadeColor */
+/* harmony import */ var _colorHelper__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(817);
+/* harmony import */ var _colorUtils__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(708);
+
+
+var calculateHighlightColor = _colorUtils__WEBPACK_IMPORTED_MODULE_0__/* .calculateHighlightColor */ .KY;
+var channelBlend = _colorUtils__WEBPACK_IMPORTED_MODULE_0__/* .channelBlend */ .lp;
+var createLinearColorScale = _colorUtils__WEBPACK_IMPORTED_MODULE_0__/* .createLinearColorScale */ .Bt;
+var darken = _colorUtils__WEBPACK_IMPORTED_MODULE_0__/* .darken */ .e$;
+var hexBlend = _colorUtils__WEBPACK_IMPORTED_MODULE_0__/* .hexBlend */ .j$;
+var hexString = _colorUtils__WEBPACK_IMPORTED_MODULE_0__/* .hexString */ .zO;
+var hexToRGBString = _colorUtils__WEBPACK_IMPORTED_MODULE_0__/* .hexToRGBString */ .ND;
+var normalizeToHexString = _colorUtils__WEBPACK_IMPORTED_MODULE_0__/* .normalizeToHexString */ .Zb;
+var parseColorString = _colorUtils__WEBPACK_IMPORTED_MODULE_0__/* .parseColorString */ .IO;
+var rgbBlend = _colorUtils__WEBPACK_IMPORTED_MODULE_0__/* .rgbBlend */ .$e;
+var rgbString = _colorUtils__WEBPACK_IMPORTED_MODULE_0__/* .rgbString */ .p8;
+var rotate = _colorUtils__WEBPACK_IMPORTED_MODULE_0__/* .rotate */ .NN;
+var shadeColor = _colorUtils__WEBPACK_IMPORTED_MODULE_0__/* .shadeColor */ .xq;
+
+//# sourceMappingURL=index.js.map
 
 /***/ })
 

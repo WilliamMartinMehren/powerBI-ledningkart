@@ -10,6 +10,7 @@ export declare class Visual implements IVisual {
     private map;
     private cordDict;
     private cords;
+    private lineData;
     constructor(options: VisualConstructorOptions);
     update(options: VisualUpdateOptions): void;
     getFormattingModel(): powerbi.visuals.FormattingModel;

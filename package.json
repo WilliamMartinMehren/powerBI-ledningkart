@@ -18,6 +18,8 @@
     "d3": "7.9.0",
     "leaflet": "^1.9.4",
     "powerbi-visuals-api": "~5.3.0",
+    "powerbi-visuals-utils-colorutils": "^6.0.5",
+    "powerbi-visuals-utils-dataviewutils": "^6.1.0",
     "powerbi-visuals-utils-formattingmodel": "6.0.4"
   },
   "devDependencies": {

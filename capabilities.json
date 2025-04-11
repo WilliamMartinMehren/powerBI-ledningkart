@@ -10,7 +10,6 @@
             "name": "category",
             "kind": "Grouping"
         },
-        
         {
             "displayName": "X",
             "name": "cable_x",
@@ -19,6 +18,11 @@
         {
             "displayName": "Y",
             "name": "cable_y",
+            "kind": "Grouping"
+        },
+        {
+            "displayName": "Z",
+            "name": "cable_z",
             "kind": "Grouping"
         }
     ],
